@@ -1,18 +1,20 @@
-name: Build
+name: Build Survivor.io Dumper
 on:
   workflow_dispatch:
     inputs:
       package_name:
         description: "Package name of the game:"
         required: true
-        default: "com.estgames.cm.sa"
+        default: "com.dxx.firenow"
 
 jobs:
   build:
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v4
-    
+      with:
+        submodules: 'recursive'
+
     - name: Set up JDK 17
       uses: actions/setup-java@v4
       with:
@@ -23,32 +25,40 @@ jobs:
     - name: Inject Package Name and Build
       run: |
         chmod +x ./gradlew
-        # Inject metadata
+        
+        # 1. Update Module Description in module.gradle
         if [ -f "module.gradle" ]; then
           sed -i 's/moduleDescription = "/moduleDescription = "(${{ github.event.inputs.package_name }}) /g' module.gradle
         fi
-        # Inject package into C++
-        if [ -f "module/src/main/cpp/game.h" ]; then
-          sed -i "s/com.game.packagename/${{ github.event.inputs.package_name }}/g" module/src/main/cpp/game.h
+        
+        # 2. Inject package into C++ code (Targeting main.cpp for Perfare repo)
+        # We search for the GamePackageName variable and swap it
+        TARGET_FILE="module/src/main/cpp/main.cpp"
+        if [ -f "$TARGET_FILE" ]; then
+          # This replaces the placeholder or existing package name string
+          sed -i 's/GamePackageName = ".*"/GamePackageName = "${{ github.event.inputs.package_name }}"/g' "$TARGET_FILE"
         fi
+        
         ./gradlew assembleRelease
 
     - name: Re-pack for Magisk Compatibility
       run: |
-        # 1. Find where Gradle put the raw files
-        RAW_DIR=$(find . -type d -name "magisk_module" | head -n 1)
-        if [ -z "$RAW_DIR" ]; then RAW_DIR="./out/magisk_module_release"; fi
+        # Find the build output folder
+        RAW_DIR=$(find . -type d -path "*/outputs/magisk_module" | head -n 1)
+        if [ -z "$RAW_DIR" ]; then 
+          echo "Could not find magisk_module directory!"
+          exit 1
+        fi
         
-        # 2. Go into that directory and re-zip manually 
-        # This fixes the "unzip error" by avoiding Zip64 and nested folders
+        # Go into the directory and zip contents directly (fixes Magisk install error)
         cd "$RAW_DIR"
-        zip -r9 ../../../cabal_dumper.zip ./*
+        zip -r9 ../../../survivor_dumper.zip ./*
         cd ../../../
         
-        echo "Zip created at: $(pwd)/cabal_dumper.zip"
+        echo "Zip created at: $(pwd)/survivor_dumper.zip"
 
     - name: Upload Artifact
       uses: actions/upload-artifact@v4
       with:
-        name: Cabal_Dumper_Fixed
-        path: cabal_dumper.zip
+        name: Survivor_Dumper_Zygisk
+        path: survivor_dumper.zip
