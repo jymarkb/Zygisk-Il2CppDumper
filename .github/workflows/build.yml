@@ -45,19 +45,19 @@ jobs:
 
     - name: Prepare Magisk Module Zip
       run: |
-        # Perfare's project outputs the flashable structure to the 'out' directory
-        if [ -d "out" ]; then
-          cd out
-          # Check if there's a subfolder like 'magisk_module_release'
-          SUBDIR=$(find . -maxdepth 1 -type d -name "*magisk_module*" | head -n 1)
-          if [ -n "$SUBDIR" ]; then
-            cd "$SUBDIR"
-          fi
-          zip -r9 ../../survivor_dumper.zip ./*
-          cd ../../
+        # 1. Locate the actual module files (where module.prop lives)
+        MODULE_DIR=$(find . -name "module.prop" -printf '%h\n' | head -n 1)
+        
+        if [ -n "$MODULE_DIR" ]; then
+          echo "Found module files in $MODULE_DIR"
+          # 2. CD into that directory so the zip root is correct
+          cd "$MODULE_DIR"
+          # 3. Zip everything in THIS folder specifically
+          zip -r9 ../../../survivor_dumper.zip ./*
+          cd ../../../
         else
-          echo "Error: 'out' directory not found. Listing all files for debug:"
-          find . -maxdepth 3 -type d
+          echo "Error: Could not find module.prop. Build likely failed."
+          find . -maxdepth 4
           exit 1
         fi
 
