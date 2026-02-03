@@ -45,24 +45,31 @@ jobs:
 
     - name: Prepare Magisk Module Zip
       run: |
-        # 1. Locate the actual module files (where module.prop lives)
-        MODULE_DIR=$(find . -name "module.prop" -printf '%h\n' | head -n 1)
+        # 1. Force the dumper to build and create the 'out' folder
+        ./gradlew :module:assembleRelease
         
-        if [ -n "$MODULE_DIR" ]; then
-          echo "Found module files in $MODULE_DIR"
-          # 2. CD into that directory so the zip root is correct
-          cd "$MODULE_DIR"
-          # 3. Zip everything in THIS folder specifically
-          zip -r9 ../../../survivor_dumper.zip ./*
-          cd ../../../
-        else
-          echo "Error: Could not find module.prop. Build likely failed."
-          find . -maxdepth 4
+        # 2. Find the directory containing module.prop (the heart of a Magisk module)
+        # We look in 'out' or 'module/build' as fallbacks
+        MOD_PATH=$(find . -name "module.prop" -not -path "*/.*" | head -n 1)
+        
+        if [ -z "$MOD_PATH" ]; then
+          echo "Error: module.prop not found! Printing directory tree for help:"
+          find . -maxdepth 4 -type d
           exit 1
         fi
+
+        # Get the directory name from the file path
+        MOD_DIR=$(dirname "$MOD_PATH")
+        echo "Found module at: $MOD_DIR"
+
+        # 3. Zip from INSIDE that directory to avoid nested folders
+        cd "$MOD_DIR"
+        zip -r9 "$GITHUB_WORKSPACE/survivor_dumper.zip" ./*
+        cd "$GITHUB_WORKSPACE"
 
     - name: Upload Artifact
       uses: actions/upload-artifact@v4
       with:
         name: Survivor_Dumper_Zygisk
         path: survivor_dumper.zip
+        if-no-files-found: error
