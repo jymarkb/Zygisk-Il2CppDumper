@@ -26,36 +26,40 @@ jobs:
       run: |
         chmod +x ./gradlew
         
-        # 1. Update Module Description in module.gradle
+        # 1. Update Module Description
         if [ -f "module.gradle" ]; then
           sed -i 's/moduleDescription = "/moduleDescription = "(${{ github.event.inputs.package_name }}) /g' module.gradle
         fi
         
-        # 2. Inject package into C++ code (Targeting main.cpp for Perfare repo)
-        # We search for the GamePackageName variable and swap it
+        # 2. Inject package into C++ code
+        # Perfare's repo uses GamePackageName in module/src/main/cpp/main.cpp
         TARGET_FILE="module/src/main/cpp/main.cpp"
         if [ -f "$TARGET_FILE" ]; then
-          # This replaces the placeholder or existing package name string
           sed -i 's/GamePackageName = ".*"/GamePackageName = "${{ github.event.inputs.package_name }}"/g' "$TARGET_FILE"
+        else
+          echo "Warning: main.cpp not found at $TARGET_FILE, trying game.h"
+          sed -i "s/com.game.packagename/${{ github.event.inputs.package_name }}/g" module/src/main/cpp/game.h || true
         fi
         
-        ./gradlew assembleRelease
+        ./gradlew :module:assembleRelease
 
-    - name: Re-pack for Magisk Compatibility
+    - name: Prepare Magisk Module Zip
       run: |
-        # Find the build output folder
-        RAW_DIR=$(find . -type d -path "*/outputs/magisk_module" | head -n 1)
-        if [ -z "$RAW_DIR" ]; then 
-          echo "Could not find magisk_module directory!"
+        # Perfare's project outputs the flashable structure to the 'out' directory
+        if [ -d "out" ]; then
+          cd out
+          # Check if there's a subfolder like 'magisk_module_release'
+          SUBDIR=$(find . -maxdepth 1 -type d -name "*magisk_module*" | head -n 1)
+          if [ -n "$SUBDIR" ]; then
+            cd "$SUBDIR"
+          fi
+          zip -r9 ../../survivor_dumper.zip ./*
+          cd ../../
+        else
+          echo "Error: 'out' directory not found. Listing all files for debug:"
+          find . -maxdepth 3 -type d
           exit 1
         fi
-        
-        # Go into the directory and zip contents directly (fixes Magisk install error)
-        cd "$RAW_DIR"
-        zip -r9 ../../../survivor_dumper.zip ./*
-        cd ../../../
-        
-        echo "Zip created at: $(pwd)/survivor_dumper.zip"
 
     - name: Upload Artifact
       uses: actions/upload-artifact@v4
