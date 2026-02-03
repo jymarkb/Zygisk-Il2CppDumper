@@ -1,27 +1,44 @@
 name: Build
 on:
   workflow_dispatch:
-      inputs:
-        package_name:
-          description: "Package name of the game:"
-          required: true
+    inputs:
+      package_name:
+        description: "Package name of the game (e.g., com.estgames.cm.sa):"
+        required: true
+        default: "com.estgames.cm.sa"
 
 jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v3
-    - uses: actions/setup-java@v3
+    - uses: actions/checkout@v4 # Updated to v4
+    
+    - name: Set up JDK 17 # Java 17 is generally preferred for modern Gradle
+      uses: actions/setup-java@v4
       with:
-        distribution: temurin
-        java-version: 11
-        cache: gradle
-    - run: |
+        distribution: 'temurin'
+        java-version: '17'
+        cache: 'gradle'
+
+    - name: Inject Package Name and Build
+      run: |
         chmod +x ./gradlew
-        sed -i 's/moduleDescription = "/moduleDescription = "(${{ github.event.inputs.package_name }}) /g' module.gradle
-        sed -i "s/com.game.packagename/${{ github.event.inputs.package_name }}/g" module/src/main/cpp/game.h
+        
+        # Inject the package name into the module description
+        if [ -f "module.gradle" ]; then
+          sed -i 's/moduleDescription = "/moduleDescription = "(${{ github.event.inputs.package_name }}) /g' module.gradle
+        fi
+        
+        # Inject the package name into the C++ source header
+        if [ -f "module/src/main/cpp/game.h" ]; then
+          sed -i "s/com.game.packagename/${{ github.event.inputs.package_name }}/g" module/src/main/cpp/game.h
+        fi
+
+        # Build the Magisk module
         ./gradlew :module:assembleRelease
-    - uses: actions/upload-artifact@v3
+
+    - name: Upload Artifact
+      uses: actions/upload-artifact@v4 # Updated to v4
       with:
-        name: zygisk-il2cppdumper
-        path: out/magisk_module_release/
+        name: zygisk-il2cppdumper-${{ github.event.inputs.package_name }}
+        path: out/magisk_module_release/*.zip
